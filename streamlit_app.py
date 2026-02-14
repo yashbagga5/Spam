@@ -166,6 +166,28 @@ def load_photo_from_assets(assets_dir, name_no_ext):
             return b64, mime
     return get_base64_image(os.path.join(assets_dir, "__missing__")), "png"
 
+
+def find_polaroid_photo(script_dir, name_no_ext):
+    """
+    Look for photo in: 1) assets/ folder, 2) project root (same folder as streamlit_app.py).
+    Returns (base64_string, mime) for use in data URL. Use this on Streamlit Cloud when
+    you upload photo1.jpg ... photo6.jpg at repo root or inside assets/.
+    """
+    for folder in (os.path.join(script_dir, "assets"), script_dir):
+        for ext in (".jpg", ".jpeg", ".png"):
+            path = os.path.join(folder, name_no_ext + ext)
+            if os.path.isfile(path):
+                b64 = get_base64_image(path)
+                mime = "jpeg" if ext in (".jpg", ".jpeg") else "png"
+                return b64, mime
+    return get_base64_image(os.path.join(script_dir, "__missing__")), "png"
+
+
+# Optional: set 6 image URLs (Imgur, etc.) for polaroid section when files aren't in repo.
+# Example: PHOTO_URLS = ["https://i.imgur.com/xxx1.jpg", "https://i.imgur.com/xxx2.jpg", ...]
+# Leave as None to use local files (assets/ or project root).
+PHOTO_URLS = None
+
 def get_next_valentines():
     now = datetime.now()
     next_v = datetime(now.year, 2, 14)
@@ -839,8 +861,8 @@ elif st.session_state.stage == "fun":
         components.html(METER_HTML, height=110)
     st.markdown("---")
 
-    # Our Memories ❤️ — Polaroid grid (6 images: assets/photo1 through photo6, .jpg / .jpeg / .png)
-    ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+    # Our Memories ❤️ — Polaroid grid: looks in assets/ then project root; or set PHOTO_URLS (6 URLs) at top of file
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     POLAROID_CAPTIONS = [
         "Our first moment ❤️",
         "Together forever 💕",
@@ -849,7 +871,11 @@ elif st.session_state.stage == "fun":
         "Adventure time ✨",
         "Us 💖",
     ]
-    polaroid_data = [load_photo_from_assets(ASSETS_DIR, f"photo{i}") for i in range(1, 7)]
+    use_urls = isinstance(PHOTO_URLS, (list, tuple)) and len(PHOTO_URLS) >= 6
+    if use_urls:
+        polaroid_data = [(PHOTO_URLS[i - 1], "url") for i in range(1, 7)]
+    else:
+        polaroid_data = [find_polaroid_photo(SCRIPT_DIR, f"photo{i}") for i in range(1, 7)]
     POLAROID_CSS = """
     <style>
     .memories-section {
@@ -923,9 +949,15 @@ elif st.session_state.stage == "fun":
     }
     </style>
     """
+    def polaroid_img_src(i):
+        d = polaroid_data[i - 1]
+        if use_urls and d[1] == "url":
+            return d[0]  # direct URL
+        return f"data:image/{d[1]};base64,{d[0]}"
+
     polaroid_cards_html = "".join(
         f'<div class="polaroid rotate{i}">'
-        f'<img src="data:image/{polaroid_data[i-1][1]};base64,{polaroid_data[i-1][0]}" alt="Memory {i}">'
+        f'<img src="{polaroid_img_src(i)}" alt="Memory {i}" loading="lazy">'
         f'<p>{POLAROID_CAPTIONS[i-1]}</p></div>'
         for i in range(1, 7)
     )
